@@ -22,6 +22,8 @@ use crate::NetworkPolicy;
 use crate::chatgpt_cloudflare_cookies::ChatGptCookieStore;
 use crate::custom_ca::BuildCustomCaTransportError;
 use crate::custom_ca::build_reqwest_client_with_custom_ca;
+use crate::lock_config::lock_disabled;
+use crate::lock_config::locked_proxy_url;
 use sha2::Digest;
 use sha2::Sha256;
 use thiserror::Error;
@@ -267,6 +269,9 @@ impl HttpClientFactory {
     /// resolution is unavailable, explicit environment settings are resolved before falling back
     /// to a direct route.
     pub fn resolve_proxy_route(&self, request_url: &str) -> OutboundProxyRoute {
+        if !lock_disabled() {
+            return locked_proxy_route(request_url);
+        }
         resolve_proxy_route(
             &ProcessEnv,
             request_url,
@@ -280,6 +285,9 @@ impl HttpClientFactory {
         &self,
         request_url: String,
     ) -> io::Result<OutboundProxyRoute> {
+        if !lock_disabled() {
+            return Ok(locked_proxy_route(&request_url));
+        }
         if matches!(
             self.outbound_proxy_policy,
             OutboundProxyPolicy::ReqwestDefault
@@ -336,6 +344,54 @@ impl HttpClientFactory {
             self.outbound_proxy_policy,
         )
     }
+}
+
+/// Loopback hosts that never traverse the locked proxy.
+const LOCK_PROXY_LOOPBACK_NO_PROXY: &str = "localhost,127.0.0.1,::1";
+
+/// Fork lock: routes every non-loopback destination through the configured proxy.
+///
+/// System proxy settings and proxy environment variables are ignored while the
+/// lock is active. Loopback destinations connect directly so local fixtures,
+/// exec servers, and localhost callbacks keep working.
+fn locked_proxy_route(request_url: &str) -> OutboundProxyRoute {
+    if is_loopback_request_url(request_url) {
+        return OutboundProxyRoute::Direct;
+    }
+    OutboundProxyRoute::Proxy {
+        url: locked_proxy_url(),
+        no_proxy: Some(LOCK_PROXY_LOOPBACK_NO_PROXY.to_string()),
+    }
+}
+
+fn is_loopback_request_url(request_url: &str) -> bool {
+    let request_url = proxy_resolution_url(request_url);
+    let Some(origin) = RequestOrigin::parse(&request_url) else {
+        return false;
+    };
+    matches!(origin.host.as_str(), "localhost" | "127.0.0.1" | "::1")
+}
+
+/// Applies the locked proxy to builders that historically kept transport-default
+/// (environment variable) proxy behavior, such as legacy login clients.
+pub(crate) fn apply_locked_proxy(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    if lock_disabled() {
+        return builder;
+    }
+    let proxy_url = locked_proxy_url();
+    let proxy = match reqwest::Proxy::all(&proxy_url) {
+        Ok(proxy) => proxy,
+        Err(error) => {
+            tracing::warn!(
+                %proxy_url,
+                %error,
+                "invalid locked proxy URL; keeping transport default"
+            );
+            return builder;
+        }
+    };
+    let no_proxy = reqwest::NoProxy::from_string(LOCK_PROXY_LOOPBACK_NO_PROXY);
+    builder.proxy(proxy.no_proxy(no_proxy))
 }
 
 fn resolve_proxy_route(
@@ -469,14 +525,19 @@ fn build_reqwest_client_for_route(
     route_class: ClientRouteClass,
     outbound_proxy_policy: OutboundProxyPolicy,
 ) -> Result<reqwest::Client, BuildRouteAwareHttpClientError> {
-    let builder = configure_proxy_for_route(
-        &ProcessEnv,
-        builder,
-        request_url,
-        route_class,
-        outbound_proxy_policy,
-        resolve_system_proxy,
-    )?;
+    let builder = if lock_disabled() {
+        configure_proxy_for_route(
+            &ProcessEnv,
+            builder,
+            request_url,
+            route_class,
+            outbound_proxy_policy,
+            resolve_system_proxy,
+        )?
+    } else {
+        let route = locked_proxy_route(request_url);
+        configure_builder_for_resolved_route(builder, route_class, &route)?
+    };
     build_reqwest_client_with_custom_ca(builder).map_err(Into::into)
 }
 
