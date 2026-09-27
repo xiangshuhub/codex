@@ -113,7 +113,10 @@ use codex_terminal_detection::TerminalName;
 #[derive(Debug, Parser)]
 #[clap(
     author,
-    version,
+    // Fork marker for local display only. Keep this in the clap attribute and NOT in
+    // CARGO_PKG_VERSION: the crate version is reported to the backend (telemetry
+    // codex_rs_version, user agents) and must stay identical to upstream releases.
+    version = concat!(env!("CARGO_PKG_VERSION"), "-lock1"),
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
