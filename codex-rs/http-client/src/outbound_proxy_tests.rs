@@ -655,3 +655,20 @@ fn system_proxy_cache_key_preserves_url_specific_pac_decisions() {
     );
     assert!(!cache_key.contains(request_url));
 }
+
+#[test]
+fn locked_proxy_route_sends_remote_destinations_through_the_locked_proxy() {
+    let route = locked_proxy_route("https://chatgpt.com/backend-api/codex/responses");
+    assert!(matches!(route, OutboundProxyRoute::Proxy { .. }));
+}
+
+#[test]
+fn locked_proxy_route_connects_directly_for_loopback_destinations() {
+    for url in [
+        "http://127.0.0.1:8080/mcp",
+        "https://localhost/sse",
+        "http://[::1]:9000/exec",
+    ] {
+        assert_eq!(locked_proxy_route(url), OutboundProxyRoute::Direct, "{url}");
+    }
+}

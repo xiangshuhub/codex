@@ -351,9 +351,7 @@ impl HttpClientBuilder {
         match proxy_routing {
             // Fork lock: legacy transport-default clients (login flows) also go through
             // the locked proxy instead of environment variables.
-            ProxyRouting::TransportDefault => {
-                crate::outbound_proxy::apply_locked_proxy(builder)
-            }
+            ProxyRouting::TransportDefault => crate::outbound_proxy::apply_locked_proxy(builder),
             ProxyRouting::Direct => builder.no_proxy(),
         }
     }

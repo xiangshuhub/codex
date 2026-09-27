@@ -60,9 +60,11 @@ impl LockConfig {
 pub fn locked_proxy_url() -> String {
     static CONFIG: OnceLock<LockConfig> = OnceLock::new();
     CONFIG
-        .get_or_init(|| load_lock_config(lock_config_path().as_deref(), |path| {
-            fs::read_to_string(path).ok()
-        }))
+        .get_or_init(|| {
+            load_lock_config(lock_config_path().as_deref(), |path| {
+                fs::read_to_string(path).ok()
+            })
+        })
         .proxy_url()
 }
 
@@ -70,9 +72,11 @@ pub fn locked_proxy_url() -> String {
 pub fn locked_timezone() -> String {
     static CONFIG: OnceLock<LockConfig> = OnceLock::new();
     CONFIG
-        .get_or_init(|| load_lock_config(lock_config_path().as_deref(), |path| {
-            fs::read_to_string(path).ok()
-        }))
+        .get_or_init(|| {
+            load_lock_config(lock_config_path().as_deref(), |path| {
+                fs::read_to_string(path).ok()
+            })
+        })
         .timezone()
 }
 
@@ -101,10 +105,7 @@ fn lock_config_path() -> Option<PathBuf> {
     Some(home.join(LOCK_FILE_NAME))
 }
 
-fn load_lock_config(
-    path: Option<&Path>,
-    read: impl Fn(&Path) -> Option<String>,
-) -> LockConfig {
+fn load_lock_config(path: Option<&Path>, read: impl Fn(&Path) -> Option<String>) -> LockConfig {
     let Some(path) = path else {
         return LockConfig::default();
     };

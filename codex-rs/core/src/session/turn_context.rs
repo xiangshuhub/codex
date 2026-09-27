@@ -836,9 +836,8 @@ fn local_time_context() -> (String, String) {
 /// Supports the locked default (`America/Los_Angeles`, with post-2007 US DST
 /// rules) and a few common fixed-offset zones; unknown names fall back to UTC.
 fn current_date_for_timezone(timezone: &str) -> String {
-    use chrono::Datelike;
     use chrono::FixedOffset;
-    use chrono::TimeZone;
+
     use chrono::Utc;
 
     let offset_seconds = match timezone {
@@ -846,13 +845,13 @@ fn current_date_for_timezone(timezone: &str) -> String {
         "Asia/Shanghai" | "Asia/Hong_Kong" | "Asia/Singapore" => 8 * 3600,
         "Asia/Tokyo" | "Asia/Seoul" => 9 * 3600,
         "Europe/London" => 0,
-        "Europe/Berlin" | "Europe/Paris" => 1 * 3600,
+        "Europe/Berlin" | "Europe/Paris" => 3600,
         "UTC" | "Etc/UTC" => 0,
         _ => 0,
     };
-    let offset = FixedOffset::east_opt(offset_seconds).unwrap_or_else(|| {
-        FixedOffset::east_opt(0).expect("UTC offset is always valid")
-    });
+    let Some(offset) = FixedOffset::east_opt(offset_seconds) else {
+        return Utc::now().format("%Y-%m-%d").to_string();
+    };
     Utc::now()
         .with_timezone(&offset)
         .format("%Y-%m-%d")
@@ -863,32 +862,34 @@ fn current_date_for_timezone(timezone: &str) -> String {
 /// 02:00 local and the first Sunday of November 02:00 local, PST (-8h) otherwise.
 fn los_angeles_offset_seconds(now: chrono::DateTime<chrono::Utc>) -> i32 {
     use chrono::Datelike;
-    use chrono::Days;
-    use chrono::NaiveDate;
-    use chrono::Utc;
-    use chrono::Weekday;
 
     let year = now.year();
-    let dst_start = nth_weekday_of_month(year, 3, Weekday::Sun, 2)
-        .and_hms_opt(10, 0, 0)
-        .expect("valid DST start instant");
-    let dst_end = nth_weekday_of_month(year, 11, Weekday::Sun, 1)
-        .and_hms_opt(9, 0, 0)
-        .expect("valid DST end instant");
+    let dst_start = nth_weekday_of_month(year, 3, chrono::Weekday::Sun, 2)
+        .and_then(|date| date.and_hms_opt(10, 0, 0));
+    let dst_end = nth_weekday_of_month(year, 11, chrono::Weekday::Sun, 1)
+        .and_then(|date| date.and_hms_opt(9, 0, 0));
     let now = now.naive_utc();
-    if now >= dst_start && now < dst_end {
-        -7 * 3600
-    } else {
-        -8 * 3600
+    match (dst_start, dst_end) {
+        (Some(start), Some(end)) if now >= start && now < end => -7 * 3600,
+        _ => -8 * 3600,
     }
 }
 
-fn nth_weekday_of_month(year: i32, month: u32, weekday: Weekday, n: u32) -> NaiveDate {
-    let first = NaiveDate::from_ymd_opt(year, month, 1).expect("valid first of month");
+fn nth_weekday_of_month(
+    year: i32,
+    month: u32,
+    weekday: chrono::Weekday,
+    n: u32,
+) -> Option<chrono::NaiveDate> {
+    use chrono::Datelike;
+    use chrono::Days;
+    use chrono::NaiveDate;
+
+    let first = NaiveDate::from_ymd_opt(year, month, 1)?;
     let first_weekday = first.weekday().num_days_from_monday();
     let target = weekday.num_days_from_monday();
     let days_ahead = (target + 7 - first_weekday) % 7 + 7 * (n - 1);
-    first + Days::new(days_ahead as u64)
+    first.checked_add_days(Days::new(days_ahead as u64))
 }
 
 impl Session {
