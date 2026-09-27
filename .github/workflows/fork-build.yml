@@ -1,0 +1,59 @@
+# Fork release build for rust-v0.157.1-lock1.
+#
+# The fork is frozen at rust-v0.157.1 and deliberately carries no upstream
+# workflows: upstream rust-release.yml triggers on `rust-v*.*.*` tags and would
+# fail on missing signing secrets. This is the only workflow on this branch.
+#
+# Artifacts are attached to the run (and to releases for `rust-v*-lock*` tags).
+# Requires Actions enabled in the fork's Settings -> Actions.
+
+name: fork-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [lock-proxy-timezone]
+    tags: ["rust-v*-lock*"]
+
+concurrency:
+  group: fork-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: codex-rs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: codex-rs
+          key: fork-lock1
+
+      - name: Build release binary
+        run: cargo build --release -p codex-cli
+
+      - name: Record version
+        id: version
+        run: echo "version=$(target/release/codex.exe --version)" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-win-x64
+          path: codex-rs/target/release/codex.exe
+          if-no-files-found: error
+
+      - name: Attach to release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: codex-rs/target/release/codex.exe
+          generate_release_notes: false
+          body: "Fork build ${{ steps.version.outputs.version }} — frozen at rust-v0.157.1 (see FORK.md)."
