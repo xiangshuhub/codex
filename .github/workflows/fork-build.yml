@@ -44,16 +44,39 @@ jobs:
         id: version
         run: echo "version=$(target/release/codex.exe --version)" >> $env:GITHUB_OUTPUT
 
+      - name: Package distribution zip
+        id: package
+        working-directory: .
+        shell: pwsh
+        run: |
+          $v = (& codex-rs/target/release/codex.exe --version) -replace '^codex-cli\s*',''
+          New-Item -ItemType Directory -Force fork-dist | Out-Null
+          Copy-Item codex-rs/target/release/codex.exe fork-dist/
+          Copy-Item fork/install.ps1 fork-dist/
+          Copy-Item fork/lock.toml.example fork-dist/
+          Copy-Item FORK.md fork-dist/
+          $zip = "codex-fork-win64-$v.zip"
+          Compress-Archive -Path fork-dist/* -DestinationPath $zip -Force
+          "zip=$zip" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - uses: actions/upload-artifact@v4
         with:
           name: codex-win-x64
           path: codex-rs/target/release/codex.exe
           if-no-files-found: error
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codex-fork-dist
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+
       - name: Attach to release (tag builds only)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: codex-rs/target/release/codex.exe
+          files: |
+            codex-rs/target/release/codex.exe
+            ${{ steps.package.outputs.zip }}
           generate_release_notes: false
           body: "Fork build ${{ steps.version.outputs.version }} — frozen at rust-v0.157.1 (see FORK.md)."

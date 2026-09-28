@@ -64,6 +64,27 @@ cargo build --release -p codex-cli     # 产物: target/release/codex.exe
 just test -p codex-http-client         # 或 -p codex-core / -p codex-tui
 ```
 
+## 安装包（GitHub Actions 自动产出）
+
+CI（`fork-build.yml`）每次构建产出 `codex-fork-win64-<版本>.zip`：
+codex.exe + `install.ps1` + `lock.toml.example` + FORK.md。
+
+解压后运行 `install.ps1`（或 `install.ps1 -Yes -RestartDaemon`）一键完成：
+npm 位置替换、daemon 位置替换、关闭 daemon 自动更新、写入 lock.toml。
+脚本幂等可重复执行；原版备份在各目录的 codex_back.exe。
+
+## 安装位置速查（手动操作时）
+
+| 位置 | 路径 |
+|---|---|
+| npm vendor | `%APPDATA%\npm\node_modules\@openai\codex\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe` |
+| 共享 daemon | `%USERPROFILE%\.codex\packages\app-server-daemon\releases\<版本>\bin\codex.exe`（VS Code 扩展；`current` 是指向 releases 的 junction） |
+| 锁定配置 | `%USERPROFILE%\.codex\lock.toml` |
+| daemon 设置 | `%USERPROFILE%\.codex\app-server-daemon\settings.json`（updater.autoUpdateEnabled=false） |
+
+⚠️ 两处二进制都必须替换：只换 npm 位置时，VS Code/daemon 会用官方核心，
+时区与代理锁定全部失效。也不要运行 `codex app-server daemon update`。
+
 已知本机（Windows）预存失败（原版 tag 同样失败，非本 fork 引入）：
 `tls_fallback_tests` 5 个（SChannel）、`suite::rmcp_client` environment 3 个（wiremock）。
 

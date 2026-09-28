@@ -1,0 +1,16 @@
+# Codex fork 锁定配置（rust-v0.157.1-lock1）
+#
+# 生效规则：所有非本机回环流量固定走 proxy（不读系统代理、不读 HTTP_PROXY 等
+# 环境变量、不直连）；发给模型的 <environment> 时区固定为 timezone。
+#
+# 文件位置：$CODEX_HOME/lock.toml（默认 ~/.codex/lock.toml），
+# 可用环境变量 CODEX_LOCK_CONFIG 指定任意路径。
+# 紧急关闭：环境变量 CODEX_LOCK_DISABLE=1 恢复官方行为。
+
+# 出站 HTTP 代理（v2rayN 默认 HTTP 端口 10809；10808 是 SOCKS5 端口，暂不支持）
+proxy = "http://127.0.0.1:10809"
+
+# 发送给模型的 IANA 时区
+# 日期计算支持：America/Los_Angeles（含夏令时）、Asia/Shanghai、Asia/Tokyo、
+# Europe/London 等；未列出的时区按 UTC 计算日期
+timezone = "America/Los_Angeles"
