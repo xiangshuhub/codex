@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   codex fork (rust-v0.157.1-lock1) 一键安装：锁定代理 + 时区版本。
 
@@ -48,7 +48,7 @@ function Backup-And-Replace([string]$target) {
 }
 
 Write-Host "== codex fork 安装器 ==" -ForegroundColor Cyan
-Write-Host "安装来源: $newExe ($((Get-Item $newExe).VersionInfo.FileVersion))"
+Write-Host "安装来源: $newExe"
 Write-Host "检测版本: $(Get-Version $newExe)"
 Write-Host "CODEX_HOME: $codexHome"
 
@@ -72,7 +72,7 @@ if (-not $SkipNpm) {
     $npmExes = Get-ChildItem $npmRoot -Recurse -Filter codex.exe -ErrorAction SilentlyContinue |
       Select-Object -ExpandProperty FullName
     if ($npmExes) {
-      foreach ($exe in $npmExes) { Backup-AndReplace $exe }
+      foreach ($exe in $npmExes) { Backup-And-Replace $exe }
     } else { Write-Host "  未找到 npm vendor codex.exe（跳过）" }
   } else { Write-Host "  未安装 npm 版 @openai/codex（跳过）" }
 } else { Write-Host "`n[1/3] npm 位置 - SkipNpm 跳过" }
@@ -89,7 +89,7 @@ if (-not $SkipDaemon) {
       Select-Object -ExpandProperty FullName
   }
   if ($daemonExes) {
-    foreach ($exe in $daemonExes) { Backup-AndReplace $exe }
+    foreach ($exe in $daemonExes) { Backup-And-Replace $exe }
     # 关闭 daemon 自动更新
     $settingsFile = Join-Path $codexHome 'app-server-daemon\settings.json'
     $settingsDir = Split-Path $settingsFile -Parent
@@ -105,7 +105,8 @@ if (-not $SkipDaemon) {
     } else {
       $obj.updater | Add-Member -NotePropertyName autoUpdateEnabled -NotePropertyValue $false
     }
-    $obj | ConvertTo-Json -Depth 10 | Set-Content $settingsFile -Encoding UTF8
+    $json = $obj | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($settingsFile, $json, [System.Text.UTF8Encoding]::new($false))
     Write-Host "  daemon 自动更新已关闭 -> $settingsFile"
     if ($RestartDaemon) {
       & $newExe app-server daemon start 2>$null | Out-String | Write-Host
